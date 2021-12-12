@@ -149,7 +149,6 @@ function check_container_status()
 check_dependencies
 
 while getopts "s:n:e:rlh" option; do
-    echo $option
     case "$option" in
         h)
             help
