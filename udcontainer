@@ -54,7 +54,8 @@ function help()
    echo "   -h     Print this Help."
    echo "   -n     The name of the container you are trying to run"
    echo "   -e     The environment of the container."
-   echo "   -l     Lista of containers you can start"
+   echo "   -l     List of containers you can start"
+   echo "   -l     List of running containers"
    echo
 }
 ################################################################################
@@ -82,6 +83,13 @@ function list_containers()
 {
     echo 
     command docker container ls -a --format 'table {{.Names}}\t{{.Image}}'
+    echo 
+}
+
+function list_running_containers()
+{
+    echo 
+    command docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}-{{.Status}}\t{{.CreatedAt}}'
     echo 
 }
 
@@ -140,14 +148,17 @@ function check_container_status()
 
 check_dependencies
 
-while getopts ":s:n:e:l:h" option; do
-    echo "$option"
+while getopts "s:n:e:rlh" option; do
+    echo $option
     case "$option" in
         h)
             help
             exit;;
         l) 
             list_containers
+            exit;;
+        r) 
+            list_running_containers
             exit;;
         s) 
             start=${OPTARG};; 
