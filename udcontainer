@@ -1,6 +1,8 @@
 #!/usr/bin/bash
 ################################################################################
 #                              udcontainer                                     #
+#                         Upper & Downer Container                             #
+#                                                                              #
 #                                                                              #
 # Script made with the intention of studing a bit of bash script programming.  #
 #                                                                              #
@@ -40,22 +42,33 @@
 function help()
 {
    # Display Help
-   echo "Script made for start/stop the docker containers for you"
+   echo "Script made for starting/stoping the docker containers for you"
    echo 
-   echo "Keep in mind, if you want to use the -e option you have to"
-   echo "make sure your containers names follows this pattern: [\"name\"-\"environment\"]"
-   echo "\"name\" represents the container name, and \"environment\" the values [local/dev/test/prod]"
-   echo "or whatever type of pattern you have."
+   echo "To run more then one container you have to put the containers"
+   echo "wrapped in quotation marks and separated with a blank space."
+   echo "If you want to run only one container you dont need to put the"
+   echo "quotations marks."
+   echo 
+   echo "Example without: udcontainer -n mongo-test"
+   echo "Example with:    udcontainer -n \"postgres-dev mysql-prod mongo-test\""
+   echo 
+   echo "Keep in mind, if you want to use the -e option you have to make sure"
+   echo "your containers names follows this pattern: [\"name\"-\"environment\"]"
+   echo "\"name\" represents the container name, and \"environment\""
+   echo "the values [local/dev/test/prod] or whatever type of pattern you have."
    echo "Name examples: postgres-dev | mysql-prod | mongo-test"
+   echo 
+   echo "Use example 1: udcontainer -n mongo -e test"
+   echo "Use example 2: udcontainer -n \"mongo postgres mysql\" -e test"
    echo
-   echo "Syntax: startcnt -[s|h|n|e]"
+   echo "Syntax: udcontainer -[s|h|n|e|l|r]"
    echo "options:"
    echo "   -s     Boolean value for start or stop the database"
    echo "   -h     Print this Help."
-   echo "   -n     The name of the container you are trying to run"
+   echo "   -n     The names of the containers you are trying to run"
    echo "   -e     The environment of the container."
    echo "   -l     List of containers you can start"
-   echo "   -l     List of running containers"
+   echo "   -r     List of running containers"
    echo
 }
 ################################################################################
@@ -66,10 +79,10 @@ function help()
 ################################################################################
 function check_dependencies()
 {
-    echo -n "Checking dependencies... "
+    echo -n "Checking dependencies before running the command... "
     for name in docker
     do
-    [[ $(which $name 2>/dev/null) ]] || { echo -en "\n$name needs to be installed. Use 'sudo apt-get install $name'";deps=1; }
+    [[ $(which $name 2>/dev/null) ]] || { echo -en "\n$name needs to be installed. ";deps=1; }
     done
     [[ $deps -ne 1 ]] && echo "OK" || { echo -en "\nInstall the above and rerun this script\n";exit 1; }
 }
@@ -95,10 +108,10 @@ function list_running_containers()
 
 function validate_container_name()
 {
-    read -ra names -d '' <<<"$containers_list"
+    read -ra names -d ' ' <<<"$containers_list"
     for name in "${names[@]}"
     do
-        if [ "$name" == "$1" ]; 
+        if [ "${name}" == "${1}" ]; 
         then
             is_valid="true"
             break
@@ -109,22 +122,6 @@ function validate_container_name()
 
     echo "$is_valid"
     unset $is_valid
-}
-
-function select_valid_container() {
-    while [[ true ]]; do
-        echo "Inform a container name: "
-        list_containers
-        read -r container_name
-        if [ "$( validate_container_name ${container_name} )" == "true" ]; 
-        then
-            break 
-        else
-            echo
-            echo "Invalid container name informed: ${container_name}"
-            echo
-        fi
-    done
 }
 
 function check_container_status()
@@ -146,8 +143,6 @@ function check_container_status()
 # Main program                                                                 #
 ################################################################################
 
-check_dependencies
-
 while getopts "s:n:e:rlh" option; do
     case "$option" in
         h)
@@ -162,7 +157,7 @@ while getopts "s:n:e:rlh" option; do
         s) 
             start=${OPTARG};; 
         n) 
-            container_name=${OPTARG};; 
+            containers_names=${OPTARG};; 
         e) 
             environment=${OPTARG};; 
         \?)
@@ -171,30 +166,62 @@ while getopts "s:n:e:rlh" option; do
     esac
 done
 
-null_name=$( [ -z ${container_name} ] && echo "True" || echo "False" )
+check_dependencies
+
 null_environment=$( [ -z ${environment} ] && echo "True" || echo "False" )
 null_start=$( [ -z ${start} ] && echo "True" || echo "False" )
 load_list_of_containers
+containers_array=($containers_names)
+number_of_containers=${#containers_array[@]}
+
+if [[ "${number_of_containers}" == "0" ]];
+then
+    echo
+    echo "No container was specified!"
+    list_containers
+    echo "Specify at least one of the containers on the list and rerun the command."
+    exit
+fi
 
 if [ "$null_environment" == "False" ]; 
 then
-    container_name=$container_name-$environment 
+    echo ${containers_array[@]}
+    for container in "${containers_array[@]}"; do
+        i=$((i+1))
+        echo $container-$environment 
+        environment_container+="$container-$environment "
+    done
+    unset containers_array
+    containers_array=$environment_container
 fi
 
-if [ "$null_name" == "true" ];
-then
-    select_valid_container
-else
-    if [ "$( validate_container_name ${container_name} )" == "false" ]; 
+for container in "${containers_array[@]}"; do
+    if [ "$( validate_container_name ${container} )" == "false" ]; 
     then
-        select_valid_container
+        echo
+        echo "-IGNORING ARGUMENT-"
+        echo "Not a valid container name: ${container}"
+        echo
+    else 
+        valid_containers+=($container)
     fi
-fi
+done
+
 
 if [ "$null_start" == "True" ];
 then
-   start_container="$(check_container_status ${container_name})"
+    for container in "${valid_containers[@]}"; do
+       start_container+=( "$(check_container_status ${container}) ")
+    done
+else
+    for container in "${valid_containers[@]}"; do
+       start_container+=("${start} ")
+    done
 fi
 
-echo "Running command: docker $start_container ${container_name}"
-command docker $start_container ${container_name}
+i=0;
+for container in "${valid_containers[@]}"; do
+    echo "Running command: docker ${start_container[$i]} ${container}"
+    command docker ${start_container[$i]} ${container}
+    i=$((i+1))
+done
